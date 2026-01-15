@@ -13,6 +13,8 @@ const App: React.FC = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>('log');
   const [statsScope, setStatsScope] = useState<StatsScope>('week');
+  const [syncId, setSyncId] = useState(localStorage.getItem('mlogger_sync_id') || '');
+  const [isSyncing, setIsSyncing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [newSession, setNewSession] = useState<NewSession>({
@@ -126,6 +128,66 @@ const App: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const handleSyncPush = async () => {
+    if (!syncId) {
+      alert('Please set a Sync ID first.');
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      const res = await fetch(`https://mlogger-api.jeff4f5da2.workers.dev/sync/${syncId}`, {
+        method: 'POST',
+        body: JSON.stringify(sessions),
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (res.ok) {
+        alert('Data synced to cloud successfully!');
+      } else {
+        alert('Server error during push.');
+      }
+    } catch (e) {
+      alert('Failed to push data. Check your connection.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleSyncPull = async () => {
+    if (!syncId) {
+      alert('Please set a Sync ID first.');
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      const res = await fetch(`https://mlogger-api.jeff4f5da2.workers.dev/sync/${syncId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          if (confirm(`Found ${data.length} entries in cloud. Replace local data?`)) {
+            setSessions(data);
+            alert('Cloud sync complete!');
+          }
+        }
+      } else {
+        alert('No data found for this Sync ID or server error.');
+      }
+    } catch (e) {
+      alert('Failed to pull data.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleSetSyncId = (id: string) => {
+    const cleanId = id.trim();
+    setSyncId(cleanId);
+    if (cleanId) {
+      localStorage.setItem('mlogger_sync_id', cleanId);
+    } else {
+      localStorage.removeItem('mlogger_sync_id');
+    }
+  };
+
   const getStatsData = (): StatsPoint[] => {
     if (statsScope === 'week') {
       return Array.from({ length: 7 }).map((_, i) => {
@@ -178,6 +240,11 @@ const App: React.FC = () => {
             onExport={handleExport}
             onImport={handleImport}
             fileInputRef={fileInputRef}
+            syncId={syncId}
+            setSyncId={handleSetSyncId}
+            onPush={handleSyncPush}
+            onPull={handleSyncPull}
+            isSyncing={isSyncing}
           />
         )}
 
